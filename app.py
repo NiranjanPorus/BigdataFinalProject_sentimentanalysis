@@ -20,7 +20,6 @@ import ktrain
 import os
 
 
-
 #WSGI app
 app=Flask(__name__)
 
