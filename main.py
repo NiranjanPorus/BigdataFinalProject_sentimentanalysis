@@ -1,92 +1,48 @@
-# import flask
-from flask import Flask, url_for,redirect,render_template,request
-import ktrain
-import os
-import tensorflow as tf
-import time
-import pandas as pd
-import tweepy
-import pandas as pd
-import nltk
+from flask import Flask
 
-nltk.download("all")
-from nltk.stem import PorterStemmer, WordNetLemmatizer
-from nltk.corpus import stopwords
-import re
-import contractions
-from textblob import TextBlob
+from transformers import pipeline, AutoTokenizer, TFAutoModelForSequenceClassification
 
-import ktrain
-import os
+model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
+model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True)
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+classifier = pipeline(task='sentiment-analysis', model=model, tokenizer=tokenizer)
 
-
-
-#WSGI app
 app=Flask(__name__)
 
-@app.route('/')
-def home():
-    return render_template('login.html')
+@app.route("/")
+def login():
+    return "Hi"
+
 
 @app.route('/intro',methods=['POST','GET'])
 def redirect_intro():
-    # import ktrain
-    # import os
-    # import tensorflow as tf
+    import ktrain
+    import os
+    import tensorflow as tf
     predicted_sentiment=""
     txt = str(request.form.values())
-    if txt != "":
+    get_text(txt)
+    if txt is not "":
         model_path = os.path.dirname(os.path.realpath(__file__)) + '/Model_BERT'
         predictor = ktrain.load_predictor(model_path)
         model = ktrain.get_predictor(predictor.model, predictor.preproc)
         predicted_sentiment = model.predict([txt])
-    return render_template('intro.html', predicted_sentiment=predicted_sentiment)
+    return txt#render_template('intro.html', predicted_sentiment=predicted_sentiment)
 
-@app.route('/redirect_tmp',methods=['POST','GET'])
-def redirect_tmp():
-    # li = ['domu','chris']
-    # import time
-    # import pandas as pd
-    start_time = time.time()
+def get_text(txt):
+    print(f"Text is {txt}")
 
 
-    # df=pd.DataFrame(data={'Name': ['Dom', 'Chris'], 'Sex': ['M', 'M']})
-    df=get_tweets()
-    lang_dist=pd.DataFrame({'lang': df.lang.value_counts()})
-
-    cleaned_df = preprocess(df)
-    translated_df, df_en = translate(cleaned_df)
-
-    # if len(df.lang.unique()) > 1:
-    #     translated_df=translate(cleaned_df)
-    # else:
-    #     translated_df=cleaned_df
-    predicted_df = bert_predict(translated_df, df_en)
-
-    exec_time=time.time() - start_time
-
-    return render_template('tmp.html', \
-                           exec_time=exec_time,\
-                           tables=[df.to_html(classes='df')], titles=['Name'],\
-                           tables1=[cleaned_df.to_html(classes='cleaned_df')], titles1=['Name'],\
-                           tables2=[lang_dist.to_html(classes='lang_dist')], titles2=['Name'],\
-                           tables3=[translated_df.to_html(classes='translated_df')], titles3=['Name'],\
-                           tables4=[predicted_df.to_html(classes='predicted_df')], titles4=['Name'])
-
-    # tables3=[translated_df.to_html(classes='translated_df')], titles3=['Name'])
-
-    # data = pd.read_excel('dummy_data.xlsx')
-    # data.set_index(['Name'], inplace=True)
-    # data.index.name = None
-    # females = data.loc[data.Gender == 'f']
-    # males = data.loc[data.Gender == 'm']
-    # return render_template('view.html', tables=[females.to_html(classes='female'), males.to_html(classes='male')],
-    #                        titles=['na', 'Female surfers', 'Male surfers'])
+def tmp():
+    import pandas as pd
+    df = pd.DataFrame(data={'Name': ['Dom', 'Chris'], 'Sex': ['M', 'M']})
+    df.to_html()
+    print(df)
 
 
 def get_tweets():
-    # import tweepy
-    # import pandas as pd
+    import tweepy
+    import pandas as pd
     import datetime
 
     api_key = "dw1HOxVvtFb3YdxyWF7nh53ou"
@@ -103,7 +59,7 @@ def get_tweets():
         api = tweepy.API(auth)
 
         # query = tweepy.Cursor(api.search, q=hashtags[i]).items(1)
-        query = api.search_tweets('#UkraineRussiaWar', count=10)
+        query = api.search_tweets('#UkraineRussiaWar', count=2)
         tweets1 = [{'Tweets': tweet.text, 'Timestamp': tweet.created_at, 'lang': tweet.lang, 'Location':tweet.user.location} for tweet in query]  # ,'Location':tweet.location
         # print(tweets1)
 
@@ -123,20 +79,20 @@ def get_tweets():
             loc_list.append(loc)
 
         df = pd.DataFrame({'Tweet': tweet_list, 'Date': date_list, 'lang': lang_list,'location':loc_list})
-
+        print(df)
+    lang_dist = pd.DataFrame({'lang': df.lang.value_counts()})
     return df
 
+def preprocess(df):
+    import nltk
+    nltk.download("all")
+    from nltk.stem import PorterStemmer, WordNetLemmatizer
+    from nltk.corpus import stopwords
+    import re
+    import contractions
+    from textblob import TextBlob
 
-def preprocess(df1):
-    # import nltk
-    # nltk.download("all")
-    # from nltk.stem import PorterStemmer, WordNetLemmatizer
-    # from nltk.corpus import stopwords
-    # import re
-    # import contractions
-    # from textblob import TextBlob
-
-    df = df1
+    # df = get_tweets()
     df['Tweet'] = [contractions.fix(str(x)) for x in df.Tweet.values]
 
     stemmer = WordNetLemmatizer()
@@ -146,8 +102,6 @@ def preprocess(df1):
         sentences[i] = re.sub('[@]+ [a-zA-z]*|[@]+[a-zA-z]*', ' ', sentences[i])
         sentences[i] = re.sub('\s*http.*/', ' ', sentences[i], flags=re.MULTILINE)
         sentences[i] = re.sub('www.*html|www.*com', ' ', sentences[i], flags=re.MULTILINE)
-        sentences[i] = re.sub('RT.*:', '', sentences[i], flags=re.MULTILINE)
-
         # sentences[i]=re.sub('http.*\/',' ',sentences[i], flags=re.MULTILINE)
         sentences[i] = re.sub('!|,|\.|@|!|\?|\'|\;|%|~|\*|\(|\)|#', '', sentences[i], flags=re.MULTILINE)
 
@@ -165,11 +119,14 @@ def preprocess(df1):
     return df
 
 
-def translate(df1):
-    # import pandas as pd
-    df=df1
+def translate():
+    import pandas as pd
+
+    df=get_tweets()
+    df=preprocess(df)
     df_non_en = df.loc[df.lang != 'en',]
     df_en = df.loc[df.lang == 'en',]
+
     lang = pd.DataFrame([['Arabic', 'ar', 'ar_AR'],
                          ['Czech', 'cs', 'cs_CZ'],
                          ['German', 'de', 'de_DE'],
@@ -225,10 +182,6 @@ def translate(df1):
                          ])
     lang.columns = ['lang', 'lang_code_raw', 'lang_code_bart']
 
-    # Delete non supported languages
-    l1 = list(lang.lang_code_raw)
-    df_non_en = df_non_en.loc[df_non_en['lang'].isin(l1)]
-
     # Add bart lang codes to df
     list_lang = []
     for i in range(len(df_non_en)):
@@ -236,7 +189,6 @@ def translate(df1):
             list_lang.extend(list(lang.loc[lang.lang_code_raw == df_non_en.iloc[i]['lang'], 'lang_code_bart']))
 
     df_non_en.loc[:, 'lang_mbart'] = list_lang
-    # df_non_en['lang_mbart']= list_lang
 
     df_tmp_non_en = df_non_en#.iloc[:5, ]
 
@@ -262,61 +214,88 @@ def translate(df1):
         # print(list_tweet)
 
     df_tmp_non_en['Translated_Tweet'] = list_tweet
+    # print(df_tmp_non_en)
 
-    return df_tmp_non_en, df_en
-
+    return df_tmp_non_en,df_en
 
 def bert_predict(df_tmp_non_en,df_en):
     df_non_en1 = df_tmp_non_en[['Date', 'Translated_Tweet', 'lang', 'location']]
     df_non_en1.columns = ['Date', 'Tweet', 'lang', 'location']
-############
-    # # import pandas as pd
+
+    import pandas as pd
     df = pd.concat([df_en, df_non_en1], axis=0)
+
     # import ktrain
     # import os
-    import tensorflow as tf
+    # import tensorflow as tf
     # model_path=os.path.dirname(os.path.realpath(__file__)) + '/Model_BERT'
-    #
-    #
+
+
     # predictor = ktrain.load_predictor(model_path)
     # model = ktrain.get_predictor(predictor.model, predictor.preproc)
     # predicted_sentiment = model.predict(list(df.Tweet.values))
     # df['predicted_sentiment']=predicted_sentiment
+    # print(df)
 
-
-    # ##########
-    from transformers import pipeline, AutoTokenizer, TFAutoModelForSequenceClassification
-    model_name = "assemblyai/distilbert-base-uncased-sst2" #'nlptown/bert-base-multilingual-uncased-sentiment'
-    model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True)
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    classifier = pipeline(task='sentiment-analysis', model=model, tokenizer=tokenizer)
-
-    # ##
-    # from transformers import AutoTokenizer, AutoModelForSequenceClassification
-    # tokenizer = AutoTokenizer.from_pretrained("assemblyai/distilbert-base-uncased-sst2")
-    # model = AutoModelForSequenceClassification.from_pretrained("assemblyai/distilbert-base-uncased-sst2")
-    # ##
-
-
-
+    #
     stars = classifier(list(df.Tweet.values))
     predicted_sentiment=[x.get('label') for x in stars]
     df['predicted_sentiment'] = predicted_sentiment
     #
-    # df.loc[(df.predicted_sentiment == '1 star') | (df.predicted_sentiment == '2 stars'), 'predicted_sentiment'] = 'negative'
-    # df.loc[(df.predicted_sentiment == '4 stars') | (df.predicted_sentiment == '5 stars'), 'predicted_sentiment'] = 'positive'
-    # df.loc[df.predicted_sentiment == '3 stars', 'predicted_sentiment'] = 'neutral'
-
-    df.loc[(df.predicted_sentiment == 'LABEL_0'), 'predicted_sentiment'] = 'negative'
-    df.loc[(df.predicted_sentiment == 'LABEL_1'), 'predicted_sentiment'] = 'positive'
-
-
+    df.loc[(df.predicted_sentiment == '1 star') | (df.predicted_sentiment == '2 stars'), 'predicted_sentiment'] = 'negative'
+    df.loc[(df.predicted_sentiment == '4 stars') | (df.predicted_sentiment == '5 stars'), 'predicted_sentiment'] = 'positive'
+    df.loc[df.predicted_sentiment == '3 stars', 'predicted_sentiment'] = 'neutral'
+    print(df)
     return df
 
-@app.route('/redirect_login',methods=['POST','GET'])
-def redirect_login():
-    return render_template('login.html')
 
 
-if __name__=='__main__':
-    app.run(debug=True)
+
+# def bert_predict(df_tmp_non_en,df_en):
+#     df_non_en1 = df_tmp_non_en[['Date', 'Translated_Tweet', 'lang', 'location']]
+#     df_non_en1.columns = ['Date', 'Tweet', 'lang', 'location']
+# ############
+#     import pandas as pd
+#     df = pd.concat([df_en, df_non_en1], axis=0)
+#     # # import ktrain
+#     # # import os
+#     # import tensorflow as tf
+#     # model_path=os.path.dirname(os.path.realpath(__file__)) + '/Model_BERT'
+#     #
+#     #
+#     # predictor = ktrain.load_predictor(model_path)
+#     # model = ktrain.get_predictor(predictor.model, predictor.preproc)
+#     # predicted_sentiment = model.predict(list(df.Tweet.values))
+#     # df['predicted_sentiment']=predicted_sentiment
+#
+#
+#     ##########
+#     from transformers import pipeline, AutoTokenizer, TFAutoModelForSequenceClassification
+#     model_name = 'nlptown/bert-base-multilingual-uncased-sentiment'
+#     model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True)
+#     tokenizer = AutoTokenizer.from_pretrained(model_name)
+#     classifier = pipeline(task='sentiment-analysis', model=model, tokenizer=tokenizer)
+#
+#     stars = classifier.predict(list(df.Tweet.values))
+#     predicted_sentiment=[x.get('label') for x in stars]
+#     df['predicted_sentiment'] = predicted_sentiment
+#
+#     return df
+
+def visualize(df1):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    df=df1
+    sns.countplot(data=df,x='predicted_sentiment',y='')
+
+
+
+
+
+# Press the green button in the gutter to run the script.
+if __name__ == '__main__':
+    translated_df, df_en = translate()
+    bert_predict(translated_df,df_en)
+
+# See PyCharm help at https://www.jetbrains.com/help/pycharm/
